@@ -1,11 +1,22 @@
-# Test your FastAPI endpoints
+# Hello!Note 后端接口测试（需先启动服务：uv run uvicorn app.main:app --reload）
 
-GET http://127.0.0.1:8000/
+# 健康检查（无需鉴权）
+GET http://127.0.0.1:8000/api/v1/health
 Accept: application/json
 
 ###
 
-GET http://127.0.0.1:8000/hello/User
-Accept: application/json
+# 登录（演示账号 demo / demo1234）
+POST http://127.0.0.1:8000/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "account": "demo",
+  "password": "demo1234"
+}
 
 ###
+
+# 面板统计（需鉴权：将上方登录返回的 access_token 填入下方 Authorization）
+# GET http://127.0.0.1:8000/api/v1/dashboard/stats
+# Authorization: Bearer <access_token>
