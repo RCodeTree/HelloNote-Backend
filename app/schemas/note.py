@@ -12,6 +12,11 @@ class TagPublic(BaseModel):
     color: str | None = None
 
 
+class TagCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+    color: str | None = Field(default=None, max_length=32)
+
+
 class NoteOut(BaseModel):
     """单条笔记（含标签），用于列表 / 详情。前端负责将 content 截取为摘要。"""
 
