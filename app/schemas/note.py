@@ -1,7 +1,7 @@
-"""笔记与标签响应模型。"""
+"""笔记与标签请求 / 响应模型。"""
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TagPublic(BaseModel):
@@ -24,3 +24,17 @@ class NoteOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     tags: list[TagPublic] = []
+
+
+class NoteCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    content: str = Field(default="")
+    is_pinned: bool = False
+    tag_ids: list[int] = Field(default_factory=list)
+
+
+class NoteUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    content: str | None = None
+    is_pinned: bool | None = None
+    tag_ids: list[int] | None = None
