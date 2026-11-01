@@ -6,6 +6,7 @@ from app.core.security import hash_password, verify_password
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import UserRegister
+from app.schemas.user import UserUpdate
 
 
 class AuthService:
@@ -32,3 +33,7 @@ class AuthService:
             email=data.email,
             password_hash=hash_password(data.password),
         )
+
+    def update_profile(self, user: User, data: UserUpdate) -> User:
+        """更新当前登录用户的资料（昵称/头像）。"""
+        return self.repo.update(user, display_name=data.display_name, avatar_url=data.avatar_url)

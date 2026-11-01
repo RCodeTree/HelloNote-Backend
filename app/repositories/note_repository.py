@@ -52,6 +52,27 @@ class NoteRepository:
             stmt = stmt.join(Note.tags).where(Tag.id == tag_id)
         return int(self.db.execute(stmt).scalar_one())
 
+    def count_by_user(self, user_id: int) -> int:
+        stmt = select(func.count()).select_from(Note).where(Note.user_id == user_id)
+        return int(self.db.execute(stmt).scalar_one())
+
+    def count_pinned(self, user_id: int) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Note)
+            .where(Note.user_id == user_id, Note.is_pinned.is_(True))
+        )
+        return int(self.db.execute(stmt).scalar_one())
+
+    def count_words(self, user_id: int) -> int:
+        """累计字数（按字符数统计 content）。"""
+        stmt = (
+            select(func.coalesce(func.sum(func.char_length(Note.content)), 0))
+            .select_from(Note)
+            .where(Note.user_id == user_id)
+        )
+        return int(self.db.execute(stmt).scalar_one())
+
     def get_recent(self, user_id: int, limit: int = 6) -> list[Note]:
         stmt = (
             select(Note)

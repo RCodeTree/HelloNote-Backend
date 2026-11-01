@@ -49,3 +49,19 @@ class UserRepository:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def update(
+        self,
+        user: User,
+        *,
+        display_name: str | None = None,
+        avatar_url: str | None = None,
+    ) -> User:
+        """局部更新用户资料；未传入的字段不修改。avatar_url 传空串表示清除。"""
+        if display_name is not None:
+            user.display_name = display_name
+        if avatar_url is not None:
+            user.avatar_url = avatar_url or None
+        self.db.commit()
+        self.db.refresh(user)
+        return user

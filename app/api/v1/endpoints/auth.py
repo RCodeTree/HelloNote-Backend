@@ -8,7 +8,7 @@ from app.core.security import create_access_token
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.auth import TokenResponse, UserLogin, UserRegister
-from app.schemas.user import UserPublic
+from app.schemas.user import UserPublic, UserUpdate
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -31,3 +31,13 @@ def login(data: UserLogin, db: Session = Depends(get_db)) -> TokenResponse:
 @router.get("/me", response_model=UserPublic)
 def read_me(user: User = Depends(get_current_user)) -> User:
     return user
+
+
+@router.patch("/me", response_model=UserPublic)
+def update_me(
+    data: UserUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """更新当前登录用户的昵称/头像。"""
+    return AuthService(db).update_profile(user, data)
