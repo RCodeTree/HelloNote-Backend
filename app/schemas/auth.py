@@ -7,7 +7,8 @@ from app.schemas.user import UserPublic
 class UserRegister(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     display_name: str = Field(min_length=1, max_length=100)
-    email: str = Field(max_length=255)
+    # 轻量邮箱格式校验（避免引入 email-validator 依赖）
+    email: str = Field(max_length=255, pattern=r"^[\w.+-]+@[\w-]+(\.[\w-]+)+$")
     password: str = Field(min_length=6, max_length=128)
 
 
