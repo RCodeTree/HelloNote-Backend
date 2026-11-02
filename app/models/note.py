@@ -22,6 +22,10 @@ class Note(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # 内容格式：markdown（默认，可预览渲染）/ text（纯文本，不做 Markdown 解析）
+    format: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="markdown", index=False
+    )
     is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), index=True

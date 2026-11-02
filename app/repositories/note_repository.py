@@ -91,8 +91,11 @@ class NoteRepository:
         content: str,
         is_pinned: bool,
         tag_ids: list[int],
+        format: str = "markdown",
     ) -> Note:
-        note = Note(user_id=user_id, title=title, content=content, is_pinned=is_pinned)
+        note = Note(
+            user_id=user_id, title=title, content=content, is_pinned=is_pinned, format=format
+        )
         self.db.add(note)
         self.db.flush()
         self._set_tags(note, user_id, tag_ids)
@@ -106,6 +109,7 @@ class NoteRepository:
         *,
         title: str | None = None,
         content: str | None = None,
+        format: str | None = None,
         is_pinned: bool | None = None,
         tag_ids: list[int] | None = None,
     ) -> Note:
@@ -113,6 +117,8 @@ class NoteRepository:
             note.title = title
         if content is not None:
             note.content = content
+        if format is not None:
+            note.format = format
         if is_pinned is not None:
             note.is_pinned = is_pinned
         if tag_ids is not None:

@@ -37,6 +37,7 @@ class NoteService:
             user_id,
             title=data.title,
             content=data.content,
+            format=data.format,
             is_pinned=data.is_pinned,
             tag_ids=data.tag_ids,
         )
@@ -47,6 +48,7 @@ class NoteService:
             note,
             title=data.title,
             content=data.content,
+            format=data.format,
             is_pinned=data.is_pinned,
             tag_ids=data.tag_ids,
         )
