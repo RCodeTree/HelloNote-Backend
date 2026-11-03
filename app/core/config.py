@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     seed_demo_user: bool = True
 
     database_url: str = (
-        "mysql+pymysql://root:root@127.0.0.1:3306/hello_note?charset=utf8mb4"
+        "mysql+pymysql://root:123456@127.0.0.1:3306/hello_note?charset=utf8mb4"
     )
 
     jwt_secret: str = "dev-only-change-me-in-production"
