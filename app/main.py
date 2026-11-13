@@ -9,16 +9,31 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.core.security import hash_password
-from app.db.database import SessionLocal
-from app.models import Note, Tag, User, note_tags  # noqa: F401  确保 ORM 映射与关联表注册
+from app.db.database import SessionLocal, engine
+from app.models import Note, Tag, User, UserActivity, note_tags  # noqa: F401  确保 ORM 映射与关联表注册
 from app.repositories.note_repository import NoteRepository
 from app.repositories.user_repository import UserRepository
 
 settings = get_settings()
 
 
+def _ensure_activity_schema() -> None:
+    """V3 新表 `user_activity` 的幂等自愈建表（checkfirst）。
+
+    数据库结构变更的正式入口是 `sql/v3/sql_v3.sql`（含历史回填）；此处仅做**防御性兜底**：
+    即使尚未执行迁移脚本，笔记增/改/删里的活跃度埋点也不会因「缺表」而拖累主业务。
+    只创建「新增的那张表」，绝不改动任何既有表或数据，可安全重复执行。
+    """
+    try:
+        UserActivity.__table__.create(bind=engine, checkfirst=True)
+    except Exception as exc:  # noqa: BLE001 - 数据库暂未就绪时不阻断应用启动
+        print(f"[startup] user_activity 自愈建表跳过：{exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 先保证 V3 活跃度表存在（幂等），再播种演示数据
+    _ensure_activity_schema()
     # 开发环境：users 表为空时播种演示账号，便于直接登录体验
     if settings.seed_demo_user and settings.app_env != "production":
         _seed_demo_user()

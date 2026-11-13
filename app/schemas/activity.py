@@ -34,8 +34,8 @@ class ActivityRangeOut(BaseModel):
 
     start_date: DateType
     end_date: DateType
-    days: list[ActivityDay] = []
-    summary: ActivitySummary = ActivitySummary()
+    days: list[ActivityDay] = Field(default_factory=list)
+    summary: ActivitySummary = Field(default_factory=ActivitySummary)
 
 
 class HeartbeatIn(BaseModel):
