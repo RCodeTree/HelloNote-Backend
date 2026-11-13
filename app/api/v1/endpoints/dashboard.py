@@ -8,6 +8,7 @@ from app.models.user import User
 from app.schemas.dashboard import DashboardStats
 from app.schemas.note import NoteOut, TagPublic
 from app.services.dashboard_service import DashboardService
+from app.models.note import Note
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"], dependencies=[Depends(get_current_user)])
 

@@ -2,8 +2,10 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.activity_time import business_today
 from app.models.note import Note
 from app.models.tag import Tag
+from app.repositories.activity_repository import ActivityRepository
 
 
 class NoteRepository:
@@ -99,6 +101,8 @@ class NoteRepository:
         self.db.add(note)
         self.db.flush()
         self._set_tags(note, user_id, tag_ids)
+        # 活跃度埋点：新增 +1（同一事务，随笔记一起 commit）
+        ActivityRepository(self.db).add(user_id, business_today(), created=1)
         self.db.commit()
         self.db.refresh(note)
         return note
@@ -123,11 +127,15 @@ class NoteRepository:
             note.is_pinned = is_pinned
         if tag_ids is not None:
             self._set_tags(note, note.user_id, tag_ids)
+        # 活跃度埋点：修改 +1（含 pin 置顶切换，因该路径同样调用 update）
+        ActivityRepository(self.db).add(note.user_id, business_today(), updated=1)
         self.db.commit()
         self.db.refresh(note)
         return note
 
     def delete(self, note: Note) -> None:
+        # 活跃度埋点：删除 +1（先于物理删除，随后一起 commit）
+        ActivityRepository(self.db).add(note.user_id, business_today(), deleted=1)
         self.db.delete(note)
         self.db.commit()
 

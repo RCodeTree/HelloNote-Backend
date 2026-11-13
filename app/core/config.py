@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
 
+    # 活跃度业务日所采用的固定 UTC 偏移（小时）。默认 +8 = Asia/Shanghai。
+    # 使用固定偏移而非 IANA 时区名，避免跨平台（尤其 Windows 无 tzdata）依赖。
+    activity_utc_offset_hours: int = 8
+
     cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
     @property
