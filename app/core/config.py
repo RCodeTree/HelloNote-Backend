@@ -31,6 +31,10 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
+    # 头像上传：本地存储根目录（相对进程工作目录）与单文件体积上限（2MB）
+    upload_dir: str = "uploads"
+    avatar_max_bytes: int = 2 * 1024 * 1024
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

@@ -56,12 +56,18 @@ class UserRepository:
         *,
         display_name: str | None = None,
         avatar_url: str | None = None,
+        bio: str | None = None,
     ) -> User:
-        """局部更新用户资料；未传入的字段不修改。avatar_url 传空串表示清除。"""
+        """局部更新用户资料；未传入的字段不修改。
+
+        bio 传空字符串表示清空简介（存 None），与 avatar_url 的处理保持一致。
+        """
         if display_name is not None:
             user.display_name = display_name
         if avatar_url is not None:
             user.avatar_url = avatar_url or None
+        if bio is not None:
+            user.bio = bio or None
         self.db.commit()
         self.db.refresh(user)
         return user

@@ -17,6 +17,8 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     username: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # V4 新增：个人简介（对应 sql/v4/sql_v4.sql）
+    bio: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="1")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()

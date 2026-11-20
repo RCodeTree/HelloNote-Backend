@@ -1,9 +1,12 @@
 """应用入口：装配路由、CORS、全局异常处理与开发环境演示数据播种。"""
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -30,10 +33,38 @@ def _ensure_activity_schema() -> None:
         print(f"[startup] user_activity 自愈建表跳过：{exc}")
 
 
+def _ensure_bio_column() -> None:
+    """V4 `users.bio` 的幂等自愈加列（对应 sql/v4/sql_v4.sql）。
+
+    正式的结构变更入口是迁移脚本；此处是防御性兜底：若开发库尚未执行 V4，
+    启动即补上该列，避免 ORM 查询 users 时因「Unknown column 'users.bio'」
+    导致登录 / 获取用户 / PATCH /auth/me 全线 500。只新增这一列，可安全重复执行。
+    """
+    try:
+        with engine.begin() as conn:
+            exists = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME = 'users' AND COLUMN_NAME = 'bio'"
+                )
+            ).scalar_one()
+            if not exists:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN bio VARCHAR(500) NULL COMMENT '个人简介'"
+                    )
+                )
+    except Exception as exc:  # noqa: BLE001 - 数据库暂未就绪时不阻断应用启动
+        print(f"[startup] users.bio 自愈加列跳过：{exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 先保证 V3 活跃度表存在（幂等），再播种演示数据
+    # 先保证 V3 活跃度表、V4 users.bio 列存在（幂等），再播种演示数据
     _ensure_activity_schema()
+    _ensure_bio_column()
     # 开发环境：users 表为空时播种演示账号，便于直接登录体验
     if settings.seed_demo_user and settings.app_env != "production":
         _seed_demo_user()
@@ -101,6 +132,12 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+# 静态资源：头像上传目录对外暴露为 /uploads（api_router 前缀为 /api/v1，不会冲突）。
+# 先建目录再挂载，避免 StaticFiles 在目录不存在时启动报错。
+upload_root = Path(settings.upload_dir)
+upload_root.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
 
 
 @app.exception_handler(AppError)
