@@ -1,4 +1,4 @@
-"""应用入口：装配路由、CORS、全局异常处理与开发环境演示数据播种。"""
+﻿"""应用入口：装配路由、CORS、全局异常处理与开发环境演示数据播种。"""
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,7 +13,18 @@ from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.core.security import hash_password
 from app.db.database import SessionLocal, engine
-from app.models import Note, Tag, User, UserActivity, note_tags  # noqa: F401  确保 ORM 映射与关联表注册
+from app.models import (  # noqa: F401  确保 ORM 映射与关联表注册
+    Conversation,
+    Friendship,
+    Message,
+    Note,
+    NoteComment,
+    NoteLike,
+    Tag,
+    User,
+    UserActivity,
+    note_tags,
+)
 from app.repositories.note_repository import NoteRepository
 from app.repositories.user_repository import UserRepository
 
@@ -31,6 +42,21 @@ def _ensure_activity_schema() -> None:
         UserActivity.__table__.create(bind=engine, checkfirst=True)
     except Exception as exc:  # noqa: BLE001 - 数据库暂未就绪时不阻断应用启动
         print(f"[startup] user_activity 自愈建表跳过：{exc}")
+
+
+def _ensure_social_schema() -> None:
+    """V5 社交功能新表的幂等自愈建表（checkfirst）。
+
+    正式入口是 `sql/v5/sql_v5.sql`；此处仅做**防御性兜底**：即使尚未跑迁移，
+    评论 / 点赞 / 笔友 / 聊天接口也不会因「缺表」拖累主业务。
+    只创建新增表（按外键依赖顺序），不改动既有表或数据，可安全重复执行；
+    单张表失败被隔离并跳过，不阻断其余表创建与应用启动。
+    """
+    for model in (NoteComment, NoteLike, Friendship, Conversation, Message):
+        try:
+            model.__table__.create(bind=engine, checkfirst=True)
+        except Exception as exc:  # noqa: BLE001 - 数据库暂未就绪时不阻断应用启动
+            print(f"[startup] {model.__tablename__} 自愈建表跳过：{exc}")
 
 
 def _ensure_bio_column() -> None:
@@ -62,9 +88,10 @@ def _ensure_bio_column() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 先保证 V3 活跃度表、V4 users.bio 列存在（幂等），再播种演示数据
+    # 先保证 V3 活跃度表、V4 users.bio 列、V5 社交新表存在（幂等），再播种演示数据
     _ensure_activity_schema()
     _ensure_bio_column()
+    _ensure_social_schema()
     # 开发环境：users 表为空时播种演示账号，便于直接登录体验
     if settings.seed_demo_user and settings.app_env != "production":
         _seed_demo_user()
@@ -143,3 +170,4 @@ app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
 @app.exception_handler(AppError)
 async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
