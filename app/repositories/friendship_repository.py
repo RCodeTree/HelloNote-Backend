@@ -65,6 +65,28 @@ class FriendshipRepository:
         self.db.refresh(friendship)
         return friendship
 
+    def update_settings(
+        self,
+        friendship: Friendship,
+        *,
+        note: str | None = None,
+        privacy: str | None = None,
+        relation_type: str | None = None,
+        closeness: str | None = None,
+    ) -> Friendship:
+        """局部更新好友设置；未传（None）的字段保持不变，note 空串存 None。"""
+        if note is not None:
+            friendship.note = note or None
+        if privacy is not None:
+            friendship.privacy = privacy
+        if relation_type is not None:
+            friendship.relation_type = relation_type
+        if closeness is not None:
+            friendship.closeness = closeness
+        self.db.commit()
+        self.db.refresh(friendship)
+        return friendship
+
     def accept(self, friendship: Friendship) -> Friendship:
         friendship.status = "accepted"
         self.db.commit()

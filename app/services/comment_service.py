@@ -4,25 +4,46 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.comment import NoteComment
 from app.repositories.comment_repository import CommentRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.social import CommentCreate, LikeOut
 
 
 class CommentService:
     def __init__(self, db: Session) -> None:
+        self.db = db
         self.repo = CommentRepository(db)
+        self.user_repo = UserRepository(db)
 
     # ---------- 评论 ----------
     def list_comments(self, note_id: int) -> list[NoteComment]:
         return self.repo.list_by_note(note_id)
 
     def create(self, note_id: int, user_id: int, data: CommentCreate) -> NoteComment:
-        if self.repo.get_note(note_id) is None:
+        note = self.repo.get_note(note_id)
+        if note is None:
             raise NotFoundError("笔记不存在")
         if data.parent_id is not None:
             parent = self.repo.get_by_id(data.parent_id)
             if parent is None or parent.note_id != note_id:
                 raise NotFoundError("父评论不存在或不属于该笔记")
-        return self.repo.create(note_id, user_id, data.content, data.parent_id)
+        comment = self.repo.create(note_id, user_id, data.content, data.parent_id)
+        # 通知埋点：给笔记作者发评论通知（作者自己评论则跳过，失败不影响主业务）
+        if note.user_id != user_id:
+            try:
+                from app.services.notification_service import NotificationService
+
+                actor = self.user_repo.get_by_id(user_id)
+                actor_name = actor.display_name if actor is not None else "有人"
+                NotificationService(self.db).notify(
+                    user_id=note.user_id,
+                    type="comment",
+                    actor_id=user_id,
+                    content=f"{actor_name}评论了你的笔记：{data.content[:30]}",
+                    related_id=note_id,
+                )
+            except Exception:  # noqa: BLE001 - 通知失败不影响主业务；主业务已 commit，回滚仅丢弃本次通知事务
+                self.db.rollback()
+        return comment
 
     def delete(self, comment_id: int, user_id: int) -> None:
         comment = self.repo.get_by_id(comment_id)
@@ -42,11 +63,28 @@ class CommentService:
         )
 
     def toggle_like(self, note_id: int, user_id: int) -> LikeOut:
-        if self.repo.get_note(note_id) is None:
+        note = self.repo.get_note(note_id)
+        if note is None:
             raise NotFoundError("笔记不存在")
         like = self.repo.get_like(note_id, user_id)
         if like is None:
             self.repo.add_like(note_id, user_id)
+            # 通知埋点：仅新增点赞时通知笔记作者（取消点赞不发）
+            if note.user_id != user_id:
+                try:
+                    from app.services.notification_service import NotificationService
+
+                    actor = self.user_repo.get_by_id(user_id)
+                    actor_name = actor.display_name if actor is not None else "有人"
+                    NotificationService(self.db).notify(
+                        user_id=note.user_id,
+                        type="like",
+                        actor_id=user_id,
+                        content=f"{actor_name}点赞了你的笔记",
+                        related_id=note_id,
+                    )
+                except Exception:  # noqa: BLE001 - 通知失败不影响主业务；主业务已 commit，回滚仅丢弃本次通知事务
+                    self.db.rollback()
         else:
             self.repo.remove_like(like)
         return self.get_like(note_id, user_id)

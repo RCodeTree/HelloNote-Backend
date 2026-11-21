@@ -52,6 +52,13 @@ class FriendOut(BaseModel):
     bio: str | None = None
     status: str
     is_requester: bool
+    # V6 好友设置（来自 friendships 表）
+    note: str | None = None
+    privacy: str = "all"
+    relation_type: str = "friend"
+    closeness: str = "friend"
+    # 对方发给当前用户的未读消息数
+    unread_count: int = 0
 
 
 # 好友请求与好友列表结构一致，直接复用
@@ -60,6 +67,15 @@ FriendRequestOut = FriendOut
 
 class AddFriendIn(BaseModel):
     username: str = Field(min_length=1, max_length=50)
+
+
+class FriendSettingsIn(BaseModel):
+    """好友设置局部更新：全部可选，None 表示不修改。"""
+
+    note: str | None = Field(default=None, max_length=100)
+    privacy: str | None = Field(default=None, max_length=16)
+    relation_type: str | None = Field(default=None, max_length=32)
+    closeness: str | None = Field(default=None, max_length=16)
 
 
 # ---------- 聊天 ----------

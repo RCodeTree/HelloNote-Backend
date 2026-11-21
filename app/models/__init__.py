@@ -3,6 +3,7 @@ from app.models.activity import UserActivity
 from app.models.chat import Conversation, Message
 from app.models.comment import NoteComment, NoteLike
 from app.models.friendship import Friendship
+from app.models.notification import Notification
 from app.models.note import Note
 from app.models.note_tag import note_tags
 from app.models.tag import Tag
@@ -17,6 +18,7 @@ __all__ = [
     "NoteComment",
     "NoteLike",
     "Friendship",
+    "Notification",
     "Conversation",
     "Message",
 ]

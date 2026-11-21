@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     dashboard,
     friends,
     health,
+    notifications,
     notes,
     tags,
     upload,
@@ -25,3 +26,4 @@ api_router.include_router(upload.router)
 api_router.include_router(comments.router)
 api_router.include_router(friends.router)
 api_router.include_router(chats.router)
+api_router.include_router(notifications.router)

@@ -21,6 +21,15 @@ class Friendship(Base):
         UnsignedBigInt, ForeignKey("users.id"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    # V6 好友设置：备注 / 可见范围 / 关系类别 / 关系程度
+    note: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    privacy: Mapped[str] = mapped_column(String(16), nullable=False, server_default="all")
+    relation_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="friend"
+    )
+    closeness: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="friend"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

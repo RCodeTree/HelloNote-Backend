@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.models.user import User
-from app.schemas.social import AddFriendIn, FriendBrief, FriendOut, OkOut
+from app.schemas.social import AddFriendIn, FriendBrief, FriendOut, FriendSettingsIn, OkOut
 from app.services.friendship_service import FriendshipService
 
 router = APIRouter(prefix="/friends", tags=["friends"], dependencies=[Depends(get_current_user)])
@@ -52,6 +52,16 @@ def accept_friend(
     user: User = Depends(get_current_user),
 ) -> FriendOut:
     return FriendshipService(db).accept(friendship_id, user.id)
+
+
+@router.patch("/{friendship_id}/settings", response_model=FriendOut)
+def update_friend_settings(
+    friendship_id: int,
+    data: FriendSettingsIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> FriendOut:
+    return FriendshipService(db).update_settings(friendship_id, user.id, data)
 
 
 @router.delete("/{friendship_id}", response_model=OkOut)
