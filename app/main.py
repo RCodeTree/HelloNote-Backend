@@ -90,7 +90,7 @@ def _ensure_bio_column() -> None:
 
 
 def _ensure_friendship_columns() -> None:
-    """V6 `friendships` 好友设置列的幂等自愈加列（对应 sql/v6/sql_v6.sql）。
+    """V6 好友设置列与 V9 申请留言列的幂等自愈加列（对应 sql/v6/sql_v6.sql）。
 
     checkfirst 只对「整张表不存在」有效；开发库里 friendships 表是 V5 建的旧结构，
     未跑 V6 迁移时 ORM 查询会因缺列 500。此处逐列判断并补齐，可安全重复执行。
@@ -101,6 +101,7 @@ def _ensure_friendship_columns() -> None:
         "relation_type": "VARCHAR(32) NOT NULL DEFAULT 'friend' COMMENT '关系类别'",
         "closeness": "VARCHAR(16) NOT NULL DEFAULT 'friend' COMMENT '关系程度'",
         "is_pinned": "BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否置顶'",
+        "request_message": "VARCHAR(200) NULL COMMENT '好友申请留言'",
     }
     try:
         with engine.begin() as conn:
@@ -355,6 +356,7 @@ app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
 @app.exception_handler(AppError)
 async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 
 

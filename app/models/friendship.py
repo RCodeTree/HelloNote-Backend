@@ -32,6 +32,8 @@ class Friendship(Base):
     )
     # V7 好友置顶
     is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    # V9 申请留言
+    request_message: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

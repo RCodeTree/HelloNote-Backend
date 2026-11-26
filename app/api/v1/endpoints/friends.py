@@ -42,7 +42,7 @@ def add_friend(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> FriendOut:
-    return FriendshipService(db).add(user.id, data.username)
+    return FriendshipService(db).add(user.id, data.username, data.message)
 
 
 @router.post("/{friendship_id}/accept", response_model=FriendOut)

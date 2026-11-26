@@ -52,6 +52,8 @@ class FriendOut(BaseModel):
     bio: str | None = None
     status: str
     is_requester: bool
+    # V9 申请留言（来自 friendships 表）
+    request_message: str | None = None
     # V6 好友设置（来自 friendships 表）
     note: str | None = None
     privacy: str = "all"
@@ -68,6 +70,8 @@ FriendRequestOut = FriendOut
 
 class AddFriendIn(BaseModel):
     username: str = Field(min_length=1, max_length=50)
+    # V9 申请留言，可选
+    message: str | None = Field(default=None, max_length=200)
 
 
 class FriendSettingsIn(BaseModel):

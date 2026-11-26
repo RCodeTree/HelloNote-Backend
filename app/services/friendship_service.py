@@ -45,6 +45,7 @@ class FriendshipService:
             bio=peer.bio,
             status=friendship.status,
             is_requester=friendship.requester_id == me_id,
+            request_message=friendship.request_message,
             # 设置全部来自当前用户的个人行；缺省时用 schema 默认值
             note=settings.note if settings is not None else None,
             privacy=(settings.privacy if settings is not None else None) or "all",
@@ -95,7 +96,7 @@ class FriendshipService:
         result.sort(key=lambda out: out.is_pinned, reverse=True)
         return result
 
-    def add(self, me_id: int, username: str) -> FriendOut:
+    def add(self, me_id: int, username: str, message: str | None = None) -> FriendOut:
         peer = self.user_repo.get_by_username(username)
         if peer is None:
             raise NotFoundError("用户不存在")
@@ -104,6 +105,11 @@ class FriendshipService:
         if self.repo.get_any_between(me_id, peer.id) is not None:
             raise ConflictError("笔友关系已存在")
         friendship = self.repo.create(me_id, peer.id)
+        # V9 申请留言：repo.create 已 commit，补写字段后再 commit 一次
+        if message:
+            friendship.request_message = message
+            self.db.commit()
+            self.db.refresh(friendship)
         # 双方各自初始化一份个人设置，后续备注 / 置顶互不影响
         self.settings_repo.get_or_create_settings(friendship.id, me_id)
         self.settings_repo.get_or_create_settings(friendship.id, peer.id)
@@ -117,7 +123,11 @@ class FriendshipService:
                 user_id=peer.id,
                 type="friend_request",
                 actor_id=me_id,
-                content=f"{actor_name}申请添加你为笔友",
+                content=(
+                    f"{actor_name}申请添加你为笔友：{message}"
+                    if message
+                    else f"{actor_name}申请添加你为笔友"
+                ),
                 related_id=friendship.id,
             )
         except Exception:  # noqa: BLE001 - 通知失败不影响主业务；主业务已 commit，回滚仅丢弃本次通知事务
