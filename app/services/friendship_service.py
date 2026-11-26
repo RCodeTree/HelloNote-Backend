@@ -2,9 +2,11 @@
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.models.friend_setting import FriendSetting
 from app.models.friendship import Friendship
 from app.models.user import User
 from app.repositories.chat_repository import ChatRepository
+from app.repositories.friend_setting_repository import FriendSettingRepository
 from app.repositories.friendship_repository import FriendshipRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.social import FriendBrief, FriendOut, FriendSettingsIn
@@ -14,6 +16,7 @@ class FriendshipService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.repo = FriendshipRepository(db)
+        self.settings_repo = FriendSettingRepository(db)
         self.user_repo = UserRepository(db)
         self.chat_repo = ChatRepository(db)
 
@@ -27,7 +30,11 @@ class FriendshipService:
 
     @staticmethod
     def _to_out(
-        friendship: Friendship, me_id: int, peer: User, unread_count: int = 0
+        friendship: Friendship,
+        me_id: int,
+        peer: User,
+        unread_count: int = 0,
+        settings: FriendSetting | None = None,
     ) -> FriendOut:
         return FriendOut(
             id=friendship.id,
@@ -38,11 +45,12 @@ class FriendshipService:
             bio=peer.bio,
             status=friendship.status,
             is_requester=friendship.requester_id == me_id,
-            note=friendship.note,
-            privacy=friendship.privacy or "all",
-            relation_type=friendship.relation_type or "friend",
-            closeness=friendship.closeness or "friend",
-            is_pinned=friendship.is_pinned,
+            # 设置全部来自当前用户的个人行；缺省时用 schema 默认值
+            note=settings.note if settings is not None else None,
+            privacy=(settings.privacy if settings is not None else None) or "all",
+            relation_type=(settings.relation_type if settings is not None else None) or "friend",
+            closeness=(settings.closeness if settings is not None else None) or "friend",
+            is_pinned=settings.is_pinned if settings is not None else False,
             unread_count=unread_count,
         )
 
@@ -59,8 +67,13 @@ class FriendshipService:
         peer = self.user_repo.get_by_id(peer_id)
         if peer is None:
             return None
+        settings = self.settings_repo.get_settings(friendship.id, me_id)
         return self._to_out(
-            friendship, me_id, peer, self._count_unread_from_peer(me_id, peer_id)
+            friendship,
+            me_id,
+            peer,
+            self._count_unread_from_peer(me_id, peer_id),
+            settings=settings,
         )
 
     def list_friends(self, me_id: int) -> list[FriendOut]:
@@ -69,6 +82,8 @@ class FriendshipService:
             out = self._build_out(fs, me_id)
             if out is not None:
                 result.append(out)
+        # 置顶是个人行为：按当前用户自己的 is_pinned 排序，同档保持原顺序
+        result.sort(key=lambda out: out.is_pinned, reverse=True)
         return result
 
     def list_requests(self, me_id: int) -> list[FriendOut]:
@@ -77,6 +92,7 @@ class FriendshipService:
             out = self._build_out(fs, me_id)
             if out is not None:
                 result.append(out)
+        result.sort(key=lambda out: out.is_pinned, reverse=True)
         return result
 
     def add(self, me_id: int, username: str) -> FriendOut:
@@ -88,6 +104,9 @@ class FriendshipService:
         if self.repo.get_any_between(me_id, peer.id) is not None:
             raise ConflictError("笔友关系已存在")
         friendship = self.repo.create(me_id, peer.id)
+        # 双方各自初始化一份个人设置，后续备注 / 置顶互不影响
+        self.settings_repo.get_or_create_settings(friendship.id, me_id)
+        self.settings_repo.get_or_create_settings(friendship.id, peer.id)
         # 通知埋点：给接收方发好友申请通知（失败不影响主业务）
         try:
             from app.services.notification_service import NotificationService
@@ -103,7 +122,12 @@ class FriendshipService:
             )
         except Exception:  # noqa: BLE001 - 通知失败不影响主业务；主业务已 commit，回滚仅丢弃本次通知事务
             self.db.rollback()
-        return self._to_out(friendship, me_id, peer)
+        return self._to_out(
+            friendship,
+            me_id,
+            peer,
+            settings=self.settings_repo.get_settings(friendship.id, me_id),
+        )
 
     def accept(self, friendship_id: int, me_id: int) -> FriendOut:
         friendship = self.repo.get_by_id(friendship_id)
@@ -113,6 +137,9 @@ class FriendshipService:
             raise ForbiddenError("仅接收方可以接受该好友请求")
         requester_id = friendship.requester_id
         friendship = self.repo.accept(friendship)
+        # 接受后为双方各自初始化个人设置（已存在则保留原值）
+        self.settings_repo.get_or_create_settings(friendship.id, requester_id)
+        self.settings_repo.get_or_create_settings(friendship.id, me_id)
         # 通知埋点：给申请方发接受通知（失败不影响主业务）
         try:
             from app.services.notification_service import NotificationService
@@ -141,8 +168,9 @@ class FriendshipService:
             raise NotFoundError("笔友关系不存在")
         if me_id not in (friendship.requester_id, friendship.addressee_id):
             raise ForbiddenError("无权修改该笔友关系设置")
-        self.repo.update_settings(
+        self.settings_repo.update_settings(
             friendship,
+            me_id,
             note=data.note,
             privacy=data.privacy,
             relation_type=data.relation_type,

@@ -15,6 +15,7 @@ from app.core.security import hash_password
 from app.db.database import SessionLocal, engine
 from app.models import (  # noqa: F401  确保 ORM 映射与关联表注册
     Conversation,
+    FriendSetting,
     Friendship,
     Message,
     Notification,
@@ -118,13 +119,158 @@ def _ensure_friendship_columns() -> None:
         print(f"[startup] friendships 设置列自愈加列跳过：{exc}")
 
 
+def _ensure_friend_settings_table() -> None:
+    """friend_settings 个人设置表的幂等自愈建表 + 存量数据迁移。
+
+    备注 / 隐私 / 关系类别 / 亲密程度 / 置顶属于「用户个人行为」，从共享的
+    friendships 设置列迁移到每用户一行的 friend_settings：建表后按每条笔友关系
+    为 requester / addressee 各补一行（已存在则跳过，重复执行无副作用），
+    初次迁移沿用 friendships 旧列的值与时间，保证用户看到的设置视觉不变。
+    表结构与 sql/v8/sql_v8.sql 对齐（含 created_at / updated_at、uk_fs_pair），
+    对早期已建的无时间戳表会自动补列并重命名唯一键。
+    """
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS friend_settings ("
+                    "id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY "
+                    "COMMENT '设置记录 ID（自增主键）', "
+                    "friendship_id BIGINT UNSIGNED NOT NULL COMMENT '笔友关系 id', "
+                    "user_id BIGINT UNSIGNED NOT NULL COMMENT '设置所属用户 id', "
+                    "note VARCHAR(100) NULL COMMENT '该用户对此笔友的备注', "
+                    "privacy VARCHAR(16) NOT NULL DEFAULT 'all' COMMENT '隐私设置', "
+                    "relation_type VARCHAR(32) NOT NULL DEFAULT 'friend' COMMENT '关系类别', "
+                    "closeness VARCHAR(16) NOT NULL DEFAULT 'friend' COMMENT '关系程度', "
+                    "is_pinned BOOLEAN NOT NULL DEFAULT FALSE COMMENT '该用户是否置顶此笔友', "
+                    "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间', "
+                    "updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP "
+                    "ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间', "
+                    "UNIQUE KEY uk_fs_pair (friendship_id, user_id), "
+                    "KEY idx_fs_user (user_id), "
+                    "CONSTRAINT fk_fs_friendship FOREIGN KEY (friendship_id) "
+                    "REFERENCES friendships(id) ON DELETE CASCADE, "
+                    "CONSTRAINT fk_fs_user FOREIGN KEY (user_id) "
+                    "REFERENCES users(id) ON DELETE CASCADE"
+                    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci "
+                    "COMMENT='笔友个人设置表（每个用户对每条笔友关系各一份）'"
+                )
+            )
+            # 开发库可能已存在早期无时间戳 / 旧唯一键名的 friend_settings，逐项补齐
+            for name, ddl in {
+                "created_at": "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'",
+                "updated_at": (
+                    "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP "
+                    "ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'"
+                ),
+            }.items():
+                exists = conn.execute(
+                    text(
+                        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                        "WHERE TABLE_SCHEMA = DATABASE() "
+                        "AND TABLE_NAME = 'friend_settings' AND COLUMN_NAME = :name"
+                    ),
+                    {"name": name},
+                ).scalar_one()
+                if not exists:
+                    conn.execute(
+                        text(f"ALTER TABLE friend_settings ADD COLUMN {name} {ddl}")
+                    )
+            new_index = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                    "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'friend_settings' "
+                    "AND INDEX_NAME = 'uk_fs_pair'"
+                )
+            ).scalar_one()
+            old_index = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                    "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'friend_settings' "
+                    "AND INDEX_NAME = 'uk_friend_settings_pair'"
+                )
+            ).scalar_one()
+            if not new_index and old_index:
+                conn.execute(
+                    text(
+                        "ALTER TABLE friend_settings "
+                        "DROP INDEX uk_friend_settings_pair, "
+                        "ADD UNIQUE KEY uk_fs_pair (friendship_id, user_id)"
+                    )
+                )
+            for old_fk, new_fk, column, ref_table in (
+                ("fk_fs_friendships", "fk_fs_friendship", "friendship_id", "friendships"),
+                ("fk_fs_users", "fk_fs_user", "user_id", "users"),
+            ):
+                counts = {}
+                for name in (old_fk, new_fk):
+                    counts[name] = conn.execute(
+                        text(
+                            "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
+                            "WHERE TABLE_SCHEMA = DATABASE() "
+                            "AND TABLE_NAME = 'friend_settings' "
+                            "AND CONSTRAINT_TYPE = 'FOREIGN KEY' AND CONSTRAINT_NAME = :name"
+                        ),
+                        {"name": name},
+                    ).scalar_one()
+                if not counts[new_fk] and counts[old_fk]:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE friend_settings DROP FOREIGN KEY {old_fk}, "
+                            f"ADD CONSTRAINT {new_fk} FOREIGN KEY ({column}) "
+                            f"REFERENCES {ref_table}(id) ON DELETE CASCADE"
+                        )
+                    )
+            friendships = conn.execute(
+                text(
+                    "SELECT id, requester_id, addressee_id, note, privacy, "
+                    "relation_type, closeness, is_pinned, created_at, updated_at "
+                    "FROM friendships"
+                )
+            ).mappings().all()
+            for row in friendships:
+                for user_id in (row["requester_id"], row["addressee_id"]):
+                    exists = conn.execute(
+                        text(
+                            "SELECT COUNT(*) FROM friend_settings "
+                            "WHERE friendship_id = :fid AND user_id = :uid"
+                        ),
+                        {"fid": row["id"], "uid": user_id},
+                    ).scalar_one()
+                    if exists:
+                        continue
+                    conn.execute(
+                        text(
+                            "INSERT INTO friend_settings "
+                            "(friendship_id, user_id, note, privacy, relation_type, "
+                            "closeness, is_pinned, created_at, updated_at) "
+                            "VALUES (:fid, :uid, :note, :privacy, :relation_type, "
+                            ":closeness, :is_pinned, :created_at, :updated_at)"
+                        ),
+                        {
+                            "fid": row["id"],
+                            "uid": user_id,
+                            "note": row["note"],
+                            "privacy": row["privacy"] or "all",
+                            "relation_type": row["relation_type"] or "friend",
+                            "closeness": row["closeness"] or "friend",
+                            "is_pinned": row["is_pinned"],
+                            "created_at": row["created_at"],
+                            "updated_at": row["updated_at"],
+                        },
+                    )
+    except Exception as exc:  # noqa: BLE001 - 数据库暂未就绪时不阻断应用启动
+        print(f"[startup] friend_settings 自愈建表 / 数据迁移跳过：{exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 先保证 V3 活跃度表、V4 users.bio 列、V5 社交新表、V6 好友设置列存在（幂等），再播种
+    # 先保证 V3 活跃度表、V4 users.bio 列、V5 社交新表、V6/V7 好友设置列、friend_settings 个人设置表及其迁移数据存在（幂等），再播种
     _ensure_activity_schema()
     _ensure_bio_column()
     _ensure_social_schema()
     _ensure_friendship_columns()
+    _ensure_friend_settings_table()
     # 开发环境：users 表为空时播种演示账号，便于直接登录体验
     if settings.seed_demo_user and settings.app_env != "production":
         _seed_demo_user()
@@ -209,6 +355,7 @@ app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
 @app.exception_handler(AppError)
 async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 
 

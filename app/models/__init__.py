@@ -2,6 +2,7 @@
 from app.models.activity import UserActivity
 from app.models.chat import Conversation, Message
 from app.models.comment import NoteComment, NoteLike
+from app.models.friend_setting import FriendSetting
 from app.models.friendship import Friendship
 from app.models.notification import Notification
 from app.models.note import Note
@@ -18,6 +19,7 @@ __all__ = [
     "NoteComment",
     "NoteLike",
     "Friendship",
+    "FriendSetting",
     "Notification",
     "Conversation",
     "Message",
