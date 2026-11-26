@@ -39,7 +39,7 @@ class FriendshipRepository:
                 ),
                 Friendship.status == status,
             )
-            .order_by(Friendship.updated_at.desc())
+            .order_by(Friendship.is_pinned.desc(), Friendship.updated_at.desc())
         )
         return list(self.db.execute(stmt).scalars().all())
 
@@ -73,6 +73,7 @@ class FriendshipRepository:
         privacy: str | None = None,
         relation_type: str | None = None,
         closeness: str | None = None,
+        is_pinned: bool | None = None,
     ) -> Friendship:
         """局部更新好友设置；未传（None）的字段保持不变，note 空串存 None。"""
         if note is not None:
@@ -83,6 +84,8 @@ class FriendshipRepository:
             friendship.relation_type = relation_type
         if closeness is not None:
             friendship.closeness = closeness
+        if is_pinned is not None:
+            friendship.is_pinned = is_pinned
         self.db.commit()
         self.db.refresh(friendship)
         return friendship

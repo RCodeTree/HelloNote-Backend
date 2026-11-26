@@ -57,6 +57,7 @@ class FriendOut(BaseModel):
     privacy: str = "all"
     relation_type: str = "friend"
     closeness: str = "friend"
+    is_pinned: bool = False
     # 对方发给当前用户的未读消息数
     unread_count: int = 0
 
@@ -76,6 +77,7 @@ class FriendSettingsIn(BaseModel):
     privacy: str | None = Field(default=None, max_length=16)
     relation_type: str | None = Field(default=None, max_length=32)
     closeness: str | None = Field(default=None, max_length=16)
+    is_pinned: bool | None = Field(default=None)
 
 
 # ---------- 聊天 ----------

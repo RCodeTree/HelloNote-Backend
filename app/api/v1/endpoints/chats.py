@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.models.user import User
-from app.schemas.social import ConversationOut, MessageCreate, MessageOut
+from app.schemas.social import ConversationOut, MessageCreate, MessageOut, OkOut
 from app.services.chat_service import ChatService
 
 router = APIRouter(prefix="/chats", tags=["chats"], dependencies=[Depends(get_current_user)])
@@ -49,3 +49,13 @@ def send_message(
     user: User = Depends(get_current_user),
 ) -> MessageOut:
     return ChatService(db).send_message(conversation_id, user.id, data.content)
+
+
+@router.post("/{conversation_id}/read", response_model=OkOut)
+def mark_read(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> OkOut:
+    ChatService(db).mark_read(conversation_id, user.id)
+    return OkOut(ok=True)

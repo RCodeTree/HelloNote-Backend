@@ -1,7 +1,7 @@
 """笔友关系模型，映射到 hello_note.friendships 表（V5 新增）。"""
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -30,6 +30,8 @@ class Friendship(Base):
     closeness: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="friend"
     )
+    # V7 好友置顶
+    is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

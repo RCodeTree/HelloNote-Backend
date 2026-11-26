@@ -99,6 +99,7 @@ def _ensure_friendship_columns() -> None:
         "privacy": "VARCHAR(16) NOT NULL DEFAULT 'all' COMMENT '隐私设置'",
         "relation_type": "VARCHAR(32) NOT NULL DEFAULT 'friend' COMMENT '关系类别'",
         "closeness": "VARCHAR(16) NOT NULL DEFAULT 'friend' COMMENT '关系程度'",
+        "is_pinned": "BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否置顶'",
     }
     try:
         with engine.begin() as conn:
@@ -208,6 +209,8 @@ app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
 @app.exception_handler(AppError)
 async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
 
 
 

@@ -77,6 +77,13 @@ class ChatService:
         self.repo.mark_read(conversation_id, me_id)
         return [MessageOut.model_validate(message) for message in messages]
 
+    def mark_read(self, conversation_id: int, me_id: int) -> None:
+        conversation = self.repo.get_conversation(conversation_id)
+        if conversation is None:
+            raise NotFoundError("会话不存在")
+        self._require_participant(conversation, me_id)
+        self.repo.mark_read(conversation_id, me_id)
+
     def send_message(self, conversation_id: int, me_id: int, content: str) -> MessageOut:
         conversation = self.repo.get_conversation(conversation_id)
         if conversation is None:

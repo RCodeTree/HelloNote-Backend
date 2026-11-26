@@ -42,6 +42,7 @@ class FriendshipService:
             privacy=friendship.privacy or "all",
             relation_type=friendship.relation_type or "friend",
             closeness=friendship.closeness or "friend",
+            is_pinned=friendship.is_pinned,
             unread_count=unread_count,
         )
 
@@ -146,6 +147,7 @@ class FriendshipService:
             privacy=data.privacy,
             relation_type=data.relation_type,
             closeness=data.closeness,
+            is_pinned=data.is_pinned,
         )
         out = self._build_out(friendship, me_id)
         if out is None:
