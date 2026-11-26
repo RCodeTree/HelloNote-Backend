@@ -3,8 +3,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.activity_time import business_today
+from app.models.comment import NoteComment, NoteLike
 from app.models.note import Note
 from app.models.tag import Tag
+from app.models.user import User
 from app.repositories.activity_repository import ActivityRepository
 
 
@@ -75,6 +77,80 @@ class NoteRepository:
         )
         return int(self.db.execute(stmt).scalar_one())
 
+    def list_public(
+        self,
+        *,
+        author_id: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+        search: str | None = None,
+        tag_id: int | None = None,
+        sort: str = "hot",
+    ) -> list[tuple[Note, str, str | None, int, int]]:
+        """公开笔记列表（广场/笔友主页），附带作者与互动计数。
+
+        返回 (note, author_name, author_avatar, like_count, comment_count)。
+        计数用标量子查询一次算出，避免 N+1。
+        """
+        like_count = (
+            select(func.count())
+            .select_from(NoteLike)
+            .where(NoteLike.note_id == Note.id)
+            .scalar_subquery()
+        )
+        comment_count = (
+            select(func.count())
+            .select_from(NoteComment)
+            .where(NoteComment.note_id == Note.id)
+            .scalar_subquery()
+        )
+        stmt = (
+            select(Note, User.display_name, User.avatar_url, like_count, comment_count)
+            .join(User, User.id == Note.user_id)
+            .where(Note.is_public.is_(True))
+        )
+        if author_id is not None:
+            stmt = stmt.where(Note.user_id == author_id)
+        if search:
+            like = f"%{search}%"
+            stmt = stmt.where(or_(Note.title.ilike(like), Note.content.ilike(like)))
+        if tag_id is not None:
+            stmt = stmt.join(Note.tags).where(Tag.id == tag_id)
+        if sort == "name":
+            stmt = stmt.order_by(Note.title.asc(), Note.updated_at.desc())
+        elif sort == "time":
+            stmt = stmt.order_by(Note.updated_at.desc())
+        else:  # hot：点赞权重更高 + 评论
+            stmt = stmt.order_by((like_count * 2 + comment_count).desc(), Note.updated_at.desc())
+        stmt = stmt.limit(limit).offset(offset).options(selectinload(Note.tags))
+        rows = self.db.execute(stmt).all()
+        return [(r[0], r[1], r[2], int(r[3]), int(r[4])) for r in rows]
+
+    def count_public(
+        self,
+        *,
+        author_id: int | None = None,
+        search: str | None = None,
+        tag_id: int | None = None,
+    ) -> int:
+        stmt = select(func.count()).select_from(Note).where(Note.is_public.is_(True))
+        if author_id is not None:
+            stmt = stmt.where(Note.user_id == author_id)
+        if search:
+            like = f"%{search}%"
+            stmt = stmt.where(or_(Note.title.ilike(like), Note.content.ilike(like)))
+        if tag_id is not None:
+            stmt = stmt.join(Note.tags).where(Tag.id == tag_id)
+        return int(self.db.execute(stmt).scalar_one())
+
+    def get_public_by_id(self, note_id: int) -> Note | None:
+        stmt = (
+            select(Note)
+            .where(Note.id == note_id, Note.is_public.is_(True))
+            .options(selectinload(Note.tags))
+        )
+        return self.db.execute(stmt).scalars().first()
+
     def get_recent(self, user_id: int, limit: int = 6) -> list[Note]:
         stmt = (
             select(Note)
@@ -94,9 +170,11 @@ class NoteRepository:
         is_pinned: bool,
         tag_ids: list[int],
         format: str = "markdown",
+        is_public: bool = False,
     ) -> Note:
         note = Note(
-            user_id=user_id, title=title, content=content, is_pinned=is_pinned, format=format
+            user_id=user_id, title=title, content=content, is_pinned=is_pinned,
+            format=format, is_public=is_public,
         )
         self.db.add(note)
         self.db.flush()
@@ -115,6 +193,7 @@ class NoteRepository:
         content: str | None = None,
         format: str | None = None,
         is_pinned: bool | None = None,
+        is_public: bool | None = None,
         tag_ids: list[int] | None = None,
     ) -> Note:
         if title is not None:
@@ -125,6 +204,8 @@ class NoteRepository:
             note.format = format
         if is_pinned is not None:
             note.is_pinned = is_pinned
+        if is_public is not None:
+            note.is_public = is_public
         if tag_ids is not None:
             self._set_tags(note, note.user_id, tag_ids)
         # 活跃度埋点：修改 +1（含 pin 置顶切换，因该路径同样调用 update）

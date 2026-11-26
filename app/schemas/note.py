@@ -31,6 +31,26 @@ class NoteOut(BaseModel):
     content: str
     format: NoteFormat = "markdown"
     is_pinned: bool
+    is_public: bool = False
+    created_at: datetime
+    updated_at: datetime
+    tags: list[TagPublic] = []
+
+
+class PublicNoteOut(BaseModel):
+    """公开笔记（广场/笔友主页）：含作者信息与互动计数。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    excerpt: str
+    format: NoteFormat = "markdown"
+    author_id: int
+    author_name: str
+    author_avatar: str | None = None
+    like_count: int = 0
+    comment_count: int = 0
     created_at: datetime
     updated_at: datetime
     tags: list[TagPublic] = []
@@ -41,6 +61,7 @@ class NoteCreate(BaseModel):
     content: str = Field(default="")
     format: NoteFormat = "markdown"
     is_pinned: bool = False
+    is_public: bool = False
     tag_ids: list[int] = Field(default_factory=list)
 
 
@@ -49,4 +70,5 @@ class NoteUpdate(BaseModel):
     content: str | None = None
     format: NoteFormat | None = None
     is_pinned: bool | None = None
+    is_public: bool | None = None
     tag_ids: list[int] | None = None

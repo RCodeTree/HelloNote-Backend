@@ -89,6 +89,28 @@ def _ensure_bio_column() -> None:
         print(f"[startup] users.bio 自愈加列跳过：{exc}")
 
 
+def _ensure_note_public_column() -> None:
+    """V10 `notes.is_public` 的幂等自愈加列（对应 sql/v10/sql_v10.sql）。"""
+    try:
+        with engine.begin() as conn:
+            exists = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME = 'notes' AND COLUMN_NAME = 'is_public'"
+                )
+            ).scalar_one()
+            if not exists:
+                conn.execute(
+                    text(
+                        "ALTER TABLE notes "
+                        "ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否公开笔记'"
+                    )
+                )
+    except Exception as exc:  # noqa: BLE001 - 数据库暂未就绪时不阻断应用启动
+        print(f"[startup] notes.is_public 自愈加列跳过：{exc}")
+
+
 def _ensure_friendship_columns() -> None:
     """V6 好友设置列与 V9 申请留言列的幂等自愈加列（对应 sql/v6/sql_v6.sql）。
 
@@ -270,6 +292,7 @@ async def lifespan(app: FastAPI):
     _ensure_activity_schema()
     _ensure_bio_column()
     _ensure_social_schema()
+    _ensure_note_public_column()
     _ensure_friendship_columns()
     _ensure_friend_settings_table()
     # 开发环境：users 表为空时播种演示账号，便于直接登录体验
@@ -356,6 +379,7 @@ app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
 @app.exception_handler(AppError)
 async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 
 

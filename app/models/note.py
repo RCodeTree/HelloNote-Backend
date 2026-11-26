@@ -27,6 +27,8 @@ class Note(Base):
         String(16), nullable=False, server_default="markdown", index=False
     )
     is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    # V10 公开笔记：广场/笔友主页可见；默认私密
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), index=True
     )
