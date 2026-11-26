@@ -45,6 +45,8 @@ class FriendshipService:
             bio=peer.bio,
             status=friendship.status,
             is_requester=friendship.requester_id == me_id,
+            # V11 在线状态：对方最后活跃时间
+            last_active_at=peer.last_active_at,
             request_message=friendship.request_message,
             # 设置全部来自当前用户的个人行；缺省时用 schema 默认值
             note=settings.note if settings is not None else None,

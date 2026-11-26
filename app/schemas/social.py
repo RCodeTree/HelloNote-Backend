@@ -37,6 +37,8 @@ class FriendBrief(BaseModel):
     username: str
     display_name: str
     avatar_url: str | None = None
+    # V11 在线状态：最后活跃时间（None 表示从未活跃）
+    last_active_at: datetime | None = None
 
 
 class FriendOut(BaseModel):
@@ -60,6 +62,8 @@ class FriendOut(BaseModel):
     relation_type: str = "friend"
     closeness: str = "friend"
     is_pinned: bool = False
+    # V11 在线状态：对方最后活跃时间
+    last_active_at: datetime | None = None
     # 对方发给当前用户的未读消息数
     unread_count: int = 0
 

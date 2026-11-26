@@ -20,6 +20,8 @@ class User(Base):
     # V4 新增：个人简介（对应 sql/v4/sql_v4.sql）
     bio: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="1")
+    # V11 新增：最后活跃时间（认证请求节流更新，支撑笔友在线状态展示）
+    last_active_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

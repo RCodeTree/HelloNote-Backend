@@ -111,6 +111,28 @@ def _ensure_note_public_column() -> None:
         print(f"[startup] notes.is_public 自愈加列跳过：{exc}")
 
 
+def _ensure_user_last_active_column() -> None:
+    """V11 `users.last_active_at` 的幂等自愈加列（对应 sql/v11/sql_v11.sql）。"""
+    try:
+        with engine.begin() as conn:
+            exists = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME = 'users' AND COLUMN_NAME = 'last_active_at'"
+                )
+            ).scalar_one()
+            if not exists:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN last_active_at DATETIME NULL COMMENT '最后活跃时间'"
+                    )
+                )
+    except Exception as exc:  # noqa: BLE001 - 数据库暂未就绪时不阻断应用启动
+        print(f"[startup] users.last_active_at 自愈加列跳过：{exc}")
+
+
 def _ensure_friendship_columns() -> None:
     """V6 好友设置列与 V9 申请留言列的幂等自愈加列（对应 sql/v6/sql_v6.sql）。
 
@@ -291,6 +313,7 @@ async def lifespan(app: FastAPI):
     # 先保证 V3 活跃度表、V4 users.bio 列、V5 社交新表、V6/V7 好友设置列、friend_settings 个人设置表及其迁移数据存在（幂等），再播种
     _ensure_activity_schema()
     _ensure_bio_column()
+    _ensure_user_last_active_column()
     _ensure_social_schema()
     _ensure_note_public_column()
     _ensure_friendship_columns()

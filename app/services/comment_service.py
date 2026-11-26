@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.comment import NoteComment
+from app.models.note import Note
 from app.repositories.comment_repository import CommentRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.social import CommentCreate, LikeOut
@@ -22,28 +23,56 @@ class CommentService:
         note = self.repo.get_note(note_id)
         if note is None:
             raise NotFoundError("笔记不存在")
+        parent = None
         if data.parent_id is not None:
             parent = self.repo.get_by_id(data.parent_id)
             if parent is None or parent.note_id != note_id:
                 raise NotFoundError("父评论不存在或不属于该笔记")
         comment = self.repo.create(note_id, user_id, data.content, data.parent_id)
-        # 通知埋点：给笔记作者发评论通知（作者自己评论则跳过，失败不影响主业务）
-        if note.user_id != user_id:
-            try:
-                from app.services.notification_service import NotificationService
+        self._notify_on_comment(note, parent, user_id, data.content)
+        return comment
 
-                actor = self.user_repo.get_by_id(user_id)
-                actor_name = actor.display_name if actor is not None else "有人"
-                NotificationService(self.db).notify(
+    def _notify_on_comment(
+        self, note: Note, parent: NoteComment | None, user_id: int, content: str
+    ) -> None:
+        """评论 / 回复通知埋点。
+
+        - 回复（parent 存在）：通知被回复评论的作者（type=reply）
+        - 顶级评论：通知笔记作者（type=comment）
+        - 被回复者即笔记作者时，仅发 reply，避免同一人收到两条重复通知
+        - 自己回复自己 / 自己评论自己：跳过
+        通知失败不影响主业务（回滚仅丢弃通知事务，主评论已提交）。
+        """
+        try:
+            from app.services.notification_service import NotificationService
+
+            actor = self.user_repo.get_by_id(user_id)
+            actor_name = actor.display_name if actor is not None else "有人"
+            ns = NotificationService(self.db)
+            notified: set[int] = set()
+
+            # 1. 回复通知：发给被回复评论的作者
+            if parent is not None and parent.user_id != user_id:
+                ns.notify(
+                    user_id=parent.user_id,
+                    type="reply",
+                    actor_id=user_id,
+                    content=f"{actor_name}回复了你的评论：{content[:30]}",
+                    related_id=note.id,
+                )
+                notified.add(parent.user_id)
+
+            # 2. 笔记作者通知：仅当尚未通过 reply 通知到该作者
+            if note.user_id != user_id and note.user_id not in notified:
+                ns.notify(
                     user_id=note.user_id,
                     type="comment",
                     actor_id=user_id,
-                    content=f"{actor_name}评论了你的笔记：{data.content[:30]}",
-                    related_id=note_id,
+                    content=f"{actor_name}评论了你的笔记：{content[:30]}",
+                    related_id=note.id,
                 )
-            except Exception:  # noqa: BLE001 - 通知失败不影响主业务；主业务已 commit，回滚仅丢弃本次通知事务
-                self.db.rollback()
-        return comment
+        except Exception:  # noqa: BLE001 - 通知失败不影响主业务
+            self.db.rollback()
 
     def delete(self, comment_id: int, user_id: int) -> None:
         comment = self.repo.get_by_id(comment_id)
